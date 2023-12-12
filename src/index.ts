@@ -62,7 +62,7 @@ export type Contract = {
 /**
  * Utility functions built around the connex library.
  */
-export class WrapperConnex {
+export class WrappedConnex {
   /**
    * Creates WrappedConnex instance given a connex connection.
    */
