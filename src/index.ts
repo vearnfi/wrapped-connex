@@ -1,7 +1,6 @@
 /// <reference path="../node_modules/@vechain/connex-types/index.d.ts" />
 
-import type { Certificate } from "thor-devkit";
-import { Transaction } from "thor-devkit";
+import { Certificate, Transaction } from "thor-devkit";
 import bn from "bignumber.js";
 import type { BigNumber } from "bignumber.js";
 import * as paramsArtifact from "./artifacts/Params.json";
@@ -192,7 +191,14 @@ export class WrappedConnex {
     return cert;
   }
 
-  // TODO: add validateCert
+  /**
+   * Verify certificate signature
+   * @param {Certificate} cert Certificate.
+   * @throws If certificate is invalid.
+   */
+  verifyCert(cert: Certificate): void {
+    Certificate.verify(cert)
+  }
 
   /**
    * Requests a signature for a transaction made of a given set of clauses.
