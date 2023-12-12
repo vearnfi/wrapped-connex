@@ -192,6 +192,8 @@ export class WrappedConnex {
     return cert;
   }
 
+  // TODO: add validateCert
+
   /**
    * Requests a signature for a transaction made of a given set of clauses.
    * @param {Connex.VM.Clause[]} clauses Clauses array.
