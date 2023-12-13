@@ -2,7 +2,6 @@
 
 import bn from "bignumber.js";
 import type { BigNumber } from "bignumber.js";
-// import * as paramsArtifact from "./artifacts/Params.json";
 
 export type AbiType =
   | "function"
@@ -267,7 +266,6 @@ export class WrappedConnex {
       }
     }
   }
-
 
   /**
    * Return current block.
