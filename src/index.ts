@@ -1,9 +1,8 @@
 /// <reference path="../node_modules/@vechain/connex-types/index.d.ts" />
 
-import { Certificate, Transaction } from "thor-devkit";
 import bn from "bignumber.js";
 import type { BigNumber } from "bignumber.js";
-import * as paramsArtifact from "./artifacts/Params.json";
+// import * as paramsArtifact from "./artifacts/Params.json";
 
 export type AbiType =
   | "function"
@@ -45,6 +44,21 @@ export type Balance = {
   vet: BigNumber;
   vtho: BigNumber;
 };
+
+/**
+ * Client side self-signed certificate
+ */
+export interface Certificate {
+  purpose: string;
+  payload: {
+    type: string;
+    content: string;
+  };
+  domain: string;
+  timestamp: number;
+  signer: string;
+  signature?: string;
+}
 
 export type Contract = {
   methods: {
@@ -192,15 +206,6 @@ export class WrappedConnex {
   }
 
   /**
-   * Verify certificate signature
-   * @param {Certificate} cert Certificate.
-   * @throws If certificate is invalid.
-   */
-  verifyCert(cert: Certificate): void {
-    Certificate.verify(cert)
-  }
-
-  /**
    * Requests a signature for a transaction made of a given set of clauses.
    * @param {Connex.VM.Clause[]} clauses Clauses array.
    * @param {string} signer Signer address.
@@ -223,6 +228,14 @@ export class WrappedConnex {
   }
 
   /**
+   * Return thor ticker to track when new blocks are added to the chain.
+   * @return {Connex.Thor.Ticker}
+   */
+  getTicker(): Connex.Thor.Ticker {
+    return this.connex.thor.ticker();
+  }
+
+  /**
    * Waits for the transaction to be confirmed.
    * @param {string} txId Transaction ID.
    * @param {number} iterations Maximum number of blocks to wait for
@@ -234,7 +247,7 @@ export class WrappedConnex {
     txId: string,
     iterations = 5,
   ): Promise<Connex.Thor.Transaction.Receipt> {
-    const ticker = this.connex.thor.ticker();
+    const ticker = this.getTicker();
 
     for (let i = 0; ; i++) {
       if (i >= iterations) {
@@ -255,26 +268,13 @@ export class WrappedConnex {
     }
   }
 
-  /**
-   * Return thor ticker to track when new blocks are added to the chain.
-   * @return {Connex.Thor.Ticker}
-   */
-  ticker(): Connex.Thor.Ticker {
-    return this.connex.thor.ticker();
-  }
 
   /**
    * Return current block.
-   * @return {Promise<Connex.Thor.Block>} Current block.
+   * @return {Promise<Connex.Thor.Block | null>} Current block.
    */
-  async getCurrentBlock(): Promise<Connex.Thor.Block> {
-    const currentBlock = await this.connex.thor.block().get();
-
-    if (currentBlock == null) {
-      throw new Error("currentBlock is undefined");
-    }
-
-    return currentBlock;
+  async getCurrentBlock(): Promise<Connex.Thor.Block | null> {
+    return this.connex.thor.block().get();
   }
 
   /**
@@ -300,76 +300,76 @@ export class WrappedConnex {
     };
   }
 
-  /**
-   * Fetch the Params VeChain smart contract to ge the current base gas price.
-   * @see {@link https://docs.vechain.org/tutorials/Useful-tips-for-building-a-dApp.html#_6-estimate-the-transaction-fee}
-   * @return {BigNumber} Base gas price.
-   */
-  async fetchBaseGasPrice(): Promise<BigNumber> {
-    // Create an instance of the VeChain Params contract.
-    const contract = this.getContract(
-      paramsArtifact.abi as AbiItem[],
-      // Params contract address for both main and test nets.
-      "0x0000000000000000000000000000506172616d73",
-    );
+  // /**
+  //  * Fetch the Params VeChain smart contract to ge the current base gas price.
+  //  * @see {@link https://docs.vechain.org/tutorials/Useful-tips-for-building-a-dApp.html#_6-estimate-the-transaction-fee}
+  //  * @return {BigNumber} Base gas price.
+  //  */
+  // async fetchBaseGasPrice(): Promise<BigNumber> {
+  //   // Create an instance of the VeChain Params contract.
+  //   const contract = this.getContract(
+  //     paramsArtifact.abi as AbiItem[],
+  //     // Params contract address for both main and test nets.
+  //     "0x0000000000000000000000000000506172616d73",
+  //   );
 
-    const decoded = await contract.methods.constant.get(
-      // 0x000000…696365 is the key of baseGasPrice https://docs.vechain.org/others/miscellaneous.html#key-of-governance-params
-      "0x000000000000000000000000000000000000626173652d6761732d7072696365",
-    );
+  //   const decoded = await contract.methods.constant.get(
+  //     // 0x000000…696365 is the key of baseGasPrice https://docs.vechain.org/others/miscellaneous.html#key-of-governance-params
+  //     "0x000000000000000000000000000000000000626173652d6761732d7072696365",
+  //   );
 
-    return bn(decoded[0]);
-  }
+  //   return bn(decoded[0]);
+  // }
 
-  /**
-   * Estimate units of gas used to execute the given set of clauses.
-   * @see https://github.com/vechain/connex/blob/c00bfc1abec3572c7d1df722bf8a7dfb14295102/packages/driver/src/driver.ts#L165
-   */
-  async estimateGas(
-    clauses: Connex.VM.Clause[],
-    signer?: string,
-  ): Promise<number> {
-    let explainer = this.connex.thor.explain(clauses);
+  // /**
+  //  * Estimate units of gas used to execute the given set of clauses.
+  //  * @see https://github.com/vechain/connex/blob/c00bfc1abec3572c7d1df722bf8a7dfb14295102/packages/driver/src/driver.ts#L165
+  //  */
+  // async estimateGas(
+  //   clauses: Connex.VM.Clause[],
+  //   signer?: string,
+  // ): Promise<number> {
+  //   let explainer = this.connex.thor.explain(clauses);
 
-    if (signer) {
-      explainer = explainer.caller(signer);
-    }
+  //   if (signer) {
+  //     explainer = explainer.caller(signer);
+  //   }
 
-    /**
-     * It is impossible to calculate the VM gas offline, which is why a simulation is required.
-     * This involves sending the clause data to a node, and the return will include details
-     * about the gas costs.
-     */
-    const outputs = await explainer.execute();
-    const vmGas = outputs.reduce((gas, output) => gas + output.gasUsed, 0);
+  //   /**
+  //    * It is impossible to calculate the VM gas offline, which is why a simulation is required.
+  //    * This involves sending the clause data to a node, and the return will include details
+  //    * about the gas costs.
+  //    */
+  //   const outputs = await explainer.execute();
+  //   const vmGas = outputs.reduce((gas, output) => gas + output.gasUsed, 0);
 
-    const intrinsicGas = Transaction.intrinsicGas(
-      clauses as Transaction.Clause[],
-    );
+  //   const intrinsicGas = Transaction.intrinsicGas(
+  //     clauses as Transaction.Clause[],
+  //   );
 
-    // Adding some extra gas to make sure the tx goes through.
-    const leeway = vmGas > 0 ? 16000 : 0;
+  //   // Adding some extra gas to make sure the tx goes through.
+  //   const leeway = vmGas > 0 ? 16000 : 0;
 
-    return intrinsicGas + vmGas + leeway;
-  }
+  //   return intrinsicGas + vmGas + leeway;
+  // }
 
-  /**
-   * Calculate tx fee given gas usage, baseGasPrice and the gasPriceCoefficient.
-   * CasPriceCoefficient in {0, 85, 255}.
-   * @param {number} gas Gas used to execute the tx.
-   * @param {BigNumber} baseGasPrice Base gas price fetched from the VeChain Params contract in wei.
-   * @param {number} gasPriceCoef Gas price coefficient to determine regular, medium or high gas cost.
-   * @return Total transaction gas cost in wei.
-   */
-  calcTxFee(
-    gas: number,
-    baseGasPrice: BigNumber,
-    gasPriceCoef: 0 | 85 | 255,
-  ): BigNumber {
-    return bn(baseGasPrice)
-      .times(gasPriceCoef)
-      .idiv(255)
-      .plus(baseGasPrice)
-      .times(gas);
-  }
+  // /**
+  //  * Calculate tx fee given gas usage, baseGasPrice and the gasPriceCoefficient.
+  //  * CasPriceCoefficient in {0, 85, 255}.
+  //  * @param {number} gas Gas used to execute the tx.
+  //  * @param {BigNumber} baseGasPrice Base gas price fetched from the VeChain Params contract in wei.
+  //  * @param {number} gasPriceCoef Gas price coefficient to determine regular, medium or high gas cost.
+  //  * @return Total transaction gas cost in wei.
+  //  */
+  // calcTxFee(
+  //   gas: number,
+  //   baseGasPrice: BigNumber,
+  //   gasPriceCoef: 0 | 85 | 255,
+  // ): BigNumber {
+  //   return bn(baseGasPrice)
+  //     .times(gasPriceCoef)
+  //     .idiv(255)
+  //     .plus(baseGasPrice)
+  //     .times(gas);
+  // }
 }
