@@ -1,7 +1,6 @@
 /// <reference path="../node_modules/@vechain/connex-types/index.d.ts" />
 
-import bn from "bignumber.js";
-import type { BigNumber } from "bignumber.js";
+import { BigNumber } from "bignumber.js";
 
 export type AbiType =
   | "function"
@@ -293,8 +292,8 @@ export class WrappedConnex {
     const { balance, energy } = await this.connex.thor.account(account).get();
 
     return {
-      vet: bn(balance),
-      vtho: bn(energy),
+      vet: new BigNumber(balance),
+      vtho: new BigNumber(energy),
     };
   }
 
