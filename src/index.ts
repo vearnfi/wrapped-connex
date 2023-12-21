@@ -87,14 +87,34 @@ export type Contract = {
   getAddress: () => Address;
 };
 
+export type WrappedConnex = Readonly<{
+  getContract: (abi: AbiItem[], address: Address) => Contract;
+  signCert: (message: Connex.Vendor.CertMessage) => Promise<Certificate>;
+  signTx: (clauses: Connex.VM.Clause[], signer: string, comment?: string) => Promise<Connex.Vendor.TxResponse>;
+  getTicker: () => Connex.Thor.Ticker;
+  waitForReceipt: (txId: string, iterations?: number) => Promise<Connex.Thor.Transaction.Receipt>;
+  getCurrentBlock: () => Promise<Connex.Thor.Block | null>;
+  getTransaction: (txId: string) => Promise<Connex.Thor.Transaction | null>;
+  fetchBalance: (account: string) => Promise<Balance>;
+  fetchEvents: (filter: Filter, callback: Callback, limit?: number) => Promise<void>;
+}>
+
 /**
- * Utility functions built around the connex library.
+ * Factory function to build a wrapper around the connex library.
+ * @param {Connex} connex Instance of the Connex library.
  */
-export class WrappedConnex {
-  /**
-   * Creates WrappedConnex instance given a connex connection.
-   */
-  constructor(private readonly connex: Connex) {}
+export function wrapConnex(connex: Connex): WrappedConnex {
+  return Object.freeze({
+    getContract,
+    signCert,
+    signTx,
+    getTicker,
+    waitForReceipt,
+    getCurrentBlock,
+    getTransaction,
+    fetchBalance,
+    fetchEvents,
+  });
 
   /**
    * Implements constant method.
@@ -102,12 +122,12 @@ export class WrappedConnex {
    * @param {AbiItem} method ABI method.
    * @return {*} Method
    */
-  private defineConstant(
+  function defineConstant(
     address: Address,
     method: AbiItem,
   ): (...args: any[]) => Promise<Record<string | number, any>> {
     return async (...args: any[]) => {
-      const res = await this.connex.thor
+      const res = await connex.thor
         .account(address)
         .method(method)
         .call(...args);
@@ -122,7 +142,7 @@ export class WrappedConnex {
    * @param {AbiItem} method ABI method.
    * @return {*} Method
    */
-  private defineSignedRequest(
+  function defineSignedRequest(
     address: Address,
     method: AbiItem,
   ): (
@@ -130,15 +150,12 @@ export class WrappedConnex {
   ) => (comment: string) => Promise<Connex.Vendor.TxResponse> {
     return (...args: any[]) =>
       async (comment: string) => {
-        const clause = this.connex.thor
+        const clause = connex.thor
           .account(address)
           .method(method)
           .asClause(...args);
 
-        return this.connex.vendor
-          .sign("tx", [clause])
-          .comment(comment)
-          .request();
+        return connex.vendor.sign("tx", [clause]).comment(comment).request();
       };
   }
 
@@ -148,12 +165,12 @@ export class WrappedConnex {
    * @param {AbiItem} method ABI method.
    * @return {*} Method
    */
-  private defineClause(
+  function defineClause(
     address: Address,
     method: AbiItem,
   ): (...args: any[]) => Connex.VM.Clause {
     return (...args: any[]) => {
-      return this.connex.thor
+      return connex.thor
         .account(address)
         .method(method)
         .asClause(...args);
@@ -167,7 +184,7 @@ export class WrappedConnex {
    * @param {Address} address Smart contract's address.
    * @return {Contract} Contract object.
    */
-  getContract(abi: AbiItem[], address: Address): Contract {
+  function getContract(abi: AbiItem[], address: Address): Contract {
     const contract: Contract = {
       methods: { constant: {}, signed: {}, clause: {} },
       events: {},
@@ -177,21 +194,16 @@ export class WrappedConnex {
     for (const item of abi) {
       if (item.name != null && item.type === "function") {
         if (item.stateMutability === "view") {
-          contract.methods.constant[item.name] = this.defineConstant(
-            address,
-            item,
-          );
+          contract.methods.constant[item.name] = defineConstant(address, item);
         } else {
-          contract.methods.signed[item.name] = this.defineSignedRequest(
+          contract.methods.signed[item.name] = defineSignedRequest(
             address,
             item,
           );
-          contract.methods.clause[item.name] = this.defineClause(address, item);
+          contract.methods.clause[item.name] = defineClause(address, item);
         }
       } else if (item.name != null && item.type === "event") {
-        contract.events[item.name] = this.connex.thor
-          .account(address)
-          .event(item);
+        contract.events[item.name] = connex.thor.account(address).event(item);
       }
     }
 
@@ -203,8 +215,10 @@ export class WrappedConnex {
    * @param {string} message Message to be displayed when signing the certificate.
    * @return Signed certificate.
    */
-  async signCert(message: Connex.Vendor.CertMessage): Promise<Certificate> {
-    const certResponse = await this.connex.vendor
+  async function signCert(
+    message: Connex.Vendor.CertMessage,
+  ): Promise<Certificate> {
+    const certResponse = await connex.vendor
       .sign("cert", message)
       // .link(window.location.host)
       .request();
@@ -228,13 +242,13 @@ export class WrappedConnex {
    * @param {string} comment Signature comment.
    * @return {Promise<Connex.Vendor.TxResponse>} Transaction response.
    */
-  async signTx(
+  async function signTx(
     clauses: Connex.VM.Clause[],
     signer: string,
     comment = "Sign transaction",
   ): Promise<Connex.Vendor.TxResponse> {
     return (
-      this.connex.vendor
+      connex.vendor
         .sign("tx", clauses)
         .signer(signer)
         // .link("https://connex.vecha.in/{txid}") // User will be back to the app by the url https://connex.vecha.in/0xffff....
@@ -247,8 +261,8 @@ export class WrappedConnex {
    * Return thor ticker to track when new blocks are added to the chain.
    * @return {Connex.Thor.Ticker}
    */
-  getTicker(): Connex.Thor.Ticker {
-    return this.connex.thor.ticker();
+  function getTicker(): Connex.Thor.Ticker {
+    return connex.thor.ticker();
   }
 
   /**
@@ -259,11 +273,11 @@ export class WrappedConnex {
    * @return {Promise<Connex.Thor.Transaction.Receipt>} Transaction receipt.
    * @throws When transaction not found or reverted.
    */
-  async waitForReceipt(
+  async function waitForReceipt(
     txId: string,
     iterations = 5,
   ): Promise<Connex.Thor.Transaction.Receipt> {
-    const ticker = this.getTicker();
+    const ticker = getTicker();
 
     for (let i = 0; ; i++) {
       if (i >= iterations) {
@@ -272,7 +286,7 @@ export class WrappedConnex {
 
       await ticker.next();
 
-      const receipt = await this.connex.thor.transaction(txId).getReceipt();
+      const receipt = await connex.thor.transaction(txId).getReceipt();
 
       if (receipt?.reverted) {
         throw new Error("The transaction has been reverted.");
@@ -288,8 +302,8 @@ export class WrappedConnex {
    * Return current block.
    * @return {Promise<Connex.Thor.Block | null>} Current block.
    */
-  async getCurrentBlock(): Promise<Connex.Thor.Block | null> {
-    return this.connex.thor.block().get();
+  async function getCurrentBlock(): Promise<Connex.Thor.Block | null> {
+    return connex.thor.block().get();
   }
 
   /**
@@ -297,8 +311,10 @@ export class WrappedConnex {
    * @param {string} txId Transaction id.
    * @return {Promise<Connex.Thor.Transaction>} Transaction.
    */
-  async getTransaction(txId: string): Promise<Connex.Thor.Transaction | null> {
-    return this.connex.thor.transaction(txId).get();
+  async function getTransaction(
+    txId: string,
+  ): Promise<Connex.Thor.Transaction | null> {
+    return connex.thor.transaction(txId).get();
   }
 
   /**
@@ -306,8 +322,8 @@ export class WrappedConnex {
    * @param {string} account Account to be checked.
    * @return {Balance} VET and VTHO account balance in wei.
    */
-  async fetchBalance(account: string): Promise<Balance> {
-    const { balance, energy } = await this.connex.thor.account(account).get();
+  async function fetchBalance(account: string): Promise<Balance> {
+    const { balance, energy } = await connex.thor.account(account).get();
 
     return {
       vet: new BigNumber(balance),
@@ -322,7 +338,7 @@ export class WrappedConnex {
    * @param {Callback} callback Callback function to handle events.
    * @param {number} limit Limit / batch size.
    */
-  async fetchEvents(
+  async function fetchEvents(
     filter: Filter,
     callback: Callback,
     limit: number = 20,
@@ -347,7 +363,7 @@ export class WrappedConnex {
   //  */
   // async fetchBaseGasPrice(): Promise<BigNumber> {
   //   // Create an instance of the VeChain Params contract.
-  //   const contract = this.getContract(
+  //   const contract = getContract(
   //     paramsArtifact.abi as AbiItem[],
   //     // Params contract address for both main and test nets.
   //     "0x0000000000000000000000000000506172616d73",
@@ -369,7 +385,7 @@ export class WrappedConnex {
   //   clauses: Connex.VM.Clause[],
   //   signer?: string,
   // ): Promise<number> {
-  //   let explainer = this.connex.thor.explain(clauses);
+  //   let explainer = connex.thor.explain(clauses);
 
   //   if (signer) {
   //     explainer = explainer.caller(signer);
