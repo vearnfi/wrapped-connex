@@ -58,6 +58,22 @@ export interface Certificate {
   signature?: string;
 }
 
+export type Address = `0x${string}`;
+
+export type Callback = (
+  events: Connex.Thor.Filter.Row<"event", Connex.Thor.Account.WithDecoded>[],
+) => Promise<void>;
+
+export type RawEvent = Connex.Thor.Filter.Row<
+  "event",
+  Connex.Thor.Account.WithDecoded
+>;
+
+export type Filter = Connex.Thor.Filter<
+  "event",
+  Connex.Thor.Account.WithDecoded
+>;
+
 export type Contract = {
   methods: {
     constant: Record<string, (...args: any[]) => Promise<any>>;
@@ -68,6 +84,7 @@ export type Contract = {
     clause: Record<string, (...args: any[]) => Connex.VM.Clause>;
   };
   events: Record<string, Connex.Thor.Account.Event>;
+  getAddress: () => Address;
 };
 
 /**
@@ -81,12 +98,12 @@ export class WrappedConnex {
 
   /**
    * Implements constant method.
-   * @param {string} address Smart contract address.
+   * @param {Address} address Smart contract address.
    * @param {AbiItem} method ABI method.
    * @return {*} Method
    */
   private defineConstant(
-    address: string,
+    address: Address,
     method: AbiItem,
   ): (...args: any[]) => Promise<Record<string | number, any>> {
     return async (...args: any[]) => {
@@ -101,12 +118,12 @@ export class WrappedConnex {
 
   /**
    * Implements signed method.
-   * @param {string} address Smart contract address.
+   * @param {Address} address Smart contract address.
    * @param {AbiItem} method ABI method.
    * @return {*} Method
    */
   private defineSignedRequest(
-    address: string,
+    address: Address,
     method: AbiItem,
   ): (
     ...args: any[]
@@ -127,12 +144,12 @@ export class WrappedConnex {
 
   /**
    * Defines method clause.
-   * @param {string} address Smart contract address.
+   * @param {Address} address Smart contract address.
    * @param {AbiItem} method ABI method.
    * @return {*} Method
    */
-  defineClause(
-    address: string,
+  private defineClause(
+    address: Address,
     method: AbiItem,
   ): (...args: any[]) => Connex.VM.Clause {
     return (...args: any[]) => {
@@ -147,13 +164,14 @@ export class WrappedConnex {
    * Creates an interface to interact with a smart contract methods
    * deployed at the given address.
    * @param {AbiItem[]} abi Smart contract's ABI.
-   * @param {string} address Smart contract's address.
+   * @param {Address} address Smart contract's address.
    * @return {Contract} Contract object.
    */
-  getContract(abi: AbiItem[], address: string): Contract {
+  getContract(abi: AbiItem[], address: Address): Contract {
     const contract: Contract = {
       methods: { constant: {}, signed: {}, clause: {} },
       events: {},
+      getAddress: () => address,
     };
 
     for (const item of abi) {
@@ -295,6 +313,31 @@ export class WrappedConnex {
       vet: new BigNumber(balance),
       vtho: new BigNumber(energy),
     };
+  }
+
+  /**
+   * Fetch events in batches by applying the given filter.
+   * Pass resulting events up via callback.
+   * @param {Filter} filter Filter.
+   * @param {Callback} callback Callback function to handle events.
+   * @param {number} limit Limit / batch size.
+   */
+  async fetchEvents(
+    filter: Filter,
+    callback: Callback,
+    limit: number = 20,
+  ): Promise<void> {
+    let offset = 0;
+
+    for (;;) {
+      const events = await filter.apply(offset, limit);
+
+      if (events.length === 0) break;
+
+      await callback(events);
+
+      offset += limit;
+    }
   }
 
   // /**
