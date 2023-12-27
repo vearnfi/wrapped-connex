@@ -79,7 +79,9 @@ export type Contract = {
     constant: Record<string, (...args: any[]) => Promise<any>>;
     signed: Record<
       string,
-      (...args: any[]) => (comment: string) => Promise<Connex.Vendor.TxResponse>
+      (
+        ...args: any[]
+      ) => (comment?: string) => Promise<Connex.Vendor.TxResponse>
     >;
     clause: Record<string, (...args: any[]) => Connex.VM.Clause>;
   };
@@ -90,14 +92,25 @@ export type Contract = {
 export type WrappedConnex = Readonly<{
   getContract: (abi: AbiItem[], address: Address) => Contract;
   signCert: (message: Connex.Vendor.CertMessage) => Promise<Certificate>;
-  signTx: (clauses: Connex.VM.Clause[], signer: string, comment?: string) => Promise<Connex.Vendor.TxResponse>;
+  signTx: (
+    clauses: Connex.VM.Clause[],
+    signer: string,
+    comment?: string,
+  ) => Promise<Connex.Vendor.TxResponse>;
   getTicker: () => Connex.Thor.Ticker;
-  waitForReceipt: (txId: string, iterations?: number) => Promise<Connex.Thor.Transaction.Receipt>;
+  waitForReceipt: (
+    txId: string,
+    iterations?: number,
+  ) => Promise<Connex.Thor.Transaction.Receipt>;
   getCurrentBlock: () => Promise<Connex.Thor.Block | null>;
   getTransaction: (txId: string) => Promise<Connex.Thor.Transaction | null>;
   fetchBalance: (account: string) => Promise<Balance>;
-  fetchEvents: (filter: Filter, callback: Callback, limit?: number) => Promise<void>;
-}>
+  fetchEvents: (
+    filter: Filter,
+    callback: Callback,
+    limit?: number,
+  ) => Promise<void>;
+}>;
 
 /**
  * Factory function to build a wrapper around the connex library.
@@ -147,15 +160,19 @@ export function wrapConnex(connex: Connex): WrappedConnex {
     method: AbiItem,
   ): (
     ...args: any[]
-  ) => (comment: string) => Promise<Connex.Vendor.TxResponse> {
+  ) => (comment?: string) => Promise<Connex.Vendor.TxResponse> {
     return (...args: any[]) =>
-      async (comment: string) => {
+      async (comment?: string) => {
         const clause = connex.thor
           .account(address)
           .method(method)
           .asClause(...args);
 
-        return connex.vendor.sign("tx", [clause]).comment(comment).request();
+        if (comment != null) {
+          return connex.vendor.sign("tx", [clause]).comment(comment).request();
+        }
+
+        return connex.vendor.sign("tx", [clause]).request();
       };
   }
 
