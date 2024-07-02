@@ -58,6 +58,14 @@ export interface Certificate {
   signature?: string;
 }
 
+export type SignTxArgs = {
+  clauses: Connex.VM.Clause[];
+  signer: string;
+  gas?: number;
+  delegate?: string;
+  comment?: string;
+}
+
 export type Address = `0x${string}`;
 
 export type Callback = (
@@ -92,11 +100,7 @@ export type Contract = {
 export type WrappedConnex = Readonly<{
   getContract: (abi: AbiItem[], address: Address) => Contract;
   signCert: (message: Connex.Vendor.CertMessage) => Promise<Certificate>;
-  signTx: (
-    clauses: Connex.VM.Clause[],
-    signer: string,
-    comment?: string,
-  ) => Promise<Connex.Vendor.TxResponse>;
+  signTx: (args: SignTxArgs) => Promise<Connex.Vendor.TxResponse>;
   getTicker: () => Connex.Thor.Ticker;
   waitForReceipt: (
     txId: string,
@@ -259,19 +263,29 @@ export function wrapConnex(connex: Connex): WrappedConnex {
    * @param {string} comment Signature comment.
    * @return {Promise<Connex.Vendor.TxResponse>} Transaction response.
    */
-  async function signTx(
-    clauses: Connex.VM.Clause[],
-    signer: string,
+  async function signTx({
+    clauses,
+    signer,
+    gas,
+    delegate,
     comment = "Sign transaction",
-  ): Promise<Connex.Vendor.TxResponse> {
-    return (
-      connex.vendor
-        .sign("tx", clauses)
-        .signer(signer)
-        // .link("https://connex.vecha.in/{txid}") // User will be back to the app by the url https://connex.vecha.in/0xffff....
-        .comment(comment)
-        .request()
-    );
+  }: SignTxArgs): Promise<Connex.Vendor.TxResponse> {
+    let tx = connex.vendor.sign("tx", clauses);
+
+    if (signer != null) {
+        tx = tx.signer(signer);
+    }
+
+    if (gas != null) {
+        tx = tx.gas(gas);
+    }
+
+    if (delegate != null) {
+        tx = tx.delegate(delegate);
+    }
+
+    // .link("https://connex.vecha.in/{txid}") // User will be back to the app by the url https://connex.vecha.in/0xffff....
+    return tx.comment(comment).request();
   }
 
   /**
