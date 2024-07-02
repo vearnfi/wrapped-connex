@@ -60,7 +60,7 @@ export interface Certificate {
 
 export type SignTxArgs = {
   clauses: Connex.VM.Clause[];
-  signer: string;
+  signer?: string;
   gas?: number;
   delegate?: string;
   comment?: string;
